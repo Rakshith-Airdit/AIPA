@@ -2,25 +2,39 @@
   "name": "AIPA-HANA-DB",
   "version": "1.0.0",
   "description": "A simple CAP project.",
-  "repository": "<Add your repository here>",
+  "repository": "",
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
+    "@cap-js-community/odata-v2-adapter": "^1.14.2",
+    "@cap-js/hana": "^1",
     "@sap/cds": "^8",
+    "@sap/hana-client": "^2.24.21",
     "express": "^4",
-    "@cap-js/hana": "^1"
+    "hdb": "^0.19.12"
   },
   "devDependencies": {
     "@cap-js/cds-types": "^0.9.0",
     "@cap-js/sqlite": "^1",
-    "@sap/cds-dk": "^8"
+    "@sap/cds-dk": "^8",
+    "@sap/hdi-deploy": "4.9.5"
   },
   "scripts": {
-    "start": "cds-serve"
+    "start": "cds-serve",
+    "dev": "cds watch --profile hybrid",
+    "build": "cds build --production",
+    "deploy": "cds deploy --to hana:hdb-other-aipa --auto-undeploy",
+    "bind-hdi": "cds bind --to hdb-other-aipa"
   },
   "cds": {
+    "requires": {
+      "db": "hana"
+    },
     "sql": {
       "native_hana_associations": false
+    },
+    "hana": {
+      "deploy-format": "hdbtable"
     }
   }
 }
