@@ -1,8 +1,8 @@
 namespace Common;
- 
+
 using {AIPALocal.staticTypes as staticType} from './staticTypes';
 using {AIPALocal.db.Associations as associations} from './associations';
- 
+
 entity QCWorkflows {
     key ID                         : UUID;
         formID                     : associations.FormAssociation;
@@ -17,18 +17,18 @@ entity QCWorkflows {
         dataRejection              : Boolean default false;
         reviewedDate               : DateTime;
 }
- 
+
 entity OrganizationInfo {
     key ID              : UUID;
         staticPagesData : staticType.staticPageFieldNames;
 }
- 
+
 entity RoleAssignment {
     key ID          : UUID;
         adminType   : staticType.AdminTypeString default #Unknown;
         allowedApps : Map;
 }
- 
+
 entity DeviceManagement {
     key ID             : UUID;
         userID         : associations.UserAssociation;
@@ -50,7 +50,7 @@ entity DeviceManagement {
         updatedTime    : DateTime;
         lastUpdated    : DateTime;
 }
- 
+
 entity ExportFileDetails {
     key ID            : UUID;
         fileName      : String(255);
@@ -68,7 +68,7 @@ entity ExportFileDetails {
         downloadTime  : DateTime;
         typeOfRecord  : String(100);
 }
- 
+
 entity VersionManagement {
     key ID                       : UUID;
         name                     : String(100);
@@ -91,7 +91,7 @@ entity VersionManagement {
         version                  : Integer;
         formUpdate               : String(50);
 }
- 
+
 entity Settings {
     key ID                : UUID;
         androidAppVersion : String(10);
@@ -108,7 +108,7 @@ entity Settings {
         maxTrueBearing    : staticType.BearingSetting;
         mobileGpsAccuracy : staticType.AccuracySetting;
 }
- 
+
 entity AzureKey {
     key ID               : UUID;
         accountName      : String(100);
@@ -116,7 +116,7 @@ entity AzureKey {
         connectionString : String(500);
         keyName          : String(100);
 }
- 
+
 entity DocumentUploads {
     key ID             : UUID;
         size           : Double;
@@ -133,7 +133,7 @@ entity DocumentUploads {
         projectName    : String;
         recordID       : String;
 }
- 
+
 entity AssetNetworks {
     key ID                   : UUID;
         date                 : DateTime;
@@ -149,7 +149,7 @@ entity AssetNetworks {
         type                 : String(50);
         __v                  : Integer;
 }
- 
+
 entity FormCollection {
     key ID             : UUID;
         formId         : associations.FormAssociation;
@@ -157,8 +157,8 @@ entity FormCollection {
         type           : String(50) default '';
         collectionName : String(100) default '';
 }
- 
- 
+
+
 entity Notifications {
     key ID             : UUID;
         assignmentName : String(100);
@@ -171,7 +171,7 @@ entity Notifications {
         createdTime    : DateTime;
         projectID      : associations.ProjectAssociation;
 }
- 
+
 entity AssetsExcelSheets {
     key ID          : UUID;
         fileId      : String(100);
@@ -181,7 +181,7 @@ entity AssetsExcelSheets {
         fileurl     : String(255);
         __v         : Integer;
 }
- 
+
 entity storeSignature {
     key ID          : UUID;
         fileID      : String;
@@ -189,13 +189,13 @@ entity storeSignature {
         contentType : String;
         __v         : Integer;
 }
- 
+
 entity userType {
     key ID   : UUID;
         name : String;
         type : Integer;
 }
- 
+
 entity ActivityLogs {
     key ID              : UUID;
         formDescription : String(255);
@@ -216,7 +216,7 @@ entity ActivityLogs {
         isDeleted       : Boolean default false;
         departmentName  : String;
 }
- 
+
 entity Departments {
     key ID              : UUID;
     key name            : String(100);
@@ -226,7 +226,7 @@ entity Departments {
         createdDateTime : DateTime;
         isDeleted       : Boolean default false;
 }
- 
+
 entity FieldDetails {
     key ID                    : UUID;
         fieldId               : String(50) default '';
@@ -262,7 +262,7 @@ entity FieldDetails {
         options               : array of String;
         disableOnEdit         : Boolean default false;
 }
- 
+
 entity Forms {
     key ID                   : UUID;
         name                 : String(255)           @mandatory;
@@ -290,7 +290,7 @@ entity Forms {
         formType             : String;
         typeOfForm           : staticType.FormType default #ActivityForm;
 }
- 
+
 entity Projects {
     key ID                    : UUID;
         type                  : String(50);
@@ -355,7 +355,7 @@ entity Projects {
         update                : Map;
         updateProject         : Map;
 }
- 
+
 entity RedFlagRules {
     key ID               : UUID;
         form             : associations.FormAssociation;
@@ -371,7 +371,7 @@ entity RedFlagRules {
         lastModifiedDate : DateTime;
         formID           : associations.FormAssociation;
 }
- 
+
 entity Users {
     key ID                                : UUID;
         departments                       : associations.DepartmentAssociation;
@@ -408,7 +408,7 @@ entity Users {
         vendor                            : associations.VendorAssociation;
         imagefilename                     : String(255) default '';
 }
- 
+
 entity Vendors {
     key ID               : UUID;
     key name             : String(100) not null;
@@ -416,7 +416,6 @@ entity Vendors {
         type             : String(50);
         createdByEmailID : String(100);
         department       : associations.DepartmentAssociation;
-        departmentName   : String;
         imageFileName    : String(255);
         img              : String(255);
         isDeleted        : Boolean default false;
