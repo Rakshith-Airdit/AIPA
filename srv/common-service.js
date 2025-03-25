@@ -1,88 +1,26 @@
 const cds = require("@sap/cds");
 const connectDB = require("../lib/db-connect");
 const axios = require("axios");
+const env = require("dotenv").config();
 const { Users, Departments, RoleAssignment, userType, Vendors } = cds.entities('Common');
+const IDP_USERNAME = process.env.IDP_USERNAME;
+const IDP_PASSWORD = process.env.IDP_PASSWORD;
+const IDP_ENDPOINT = process.env.IDP_ENDPOINT;
+const connectionString = process.env.AZURE_CONNECTION_STRING;
+const containerName = process.env.AZURE_CONTAINER_NAME;
+const fileUpload = require('express-fileupload');
 
-async function buildSearchQuery(req, defaultFields) {
-    let query = { isDeleted: false };
+// Use the unified dynamic query builder helper along with the other helpers.
+const {
+    buildDynamicQuery,
+    uploadImageToAzure, deleteImageFromAzure
+} = require('../lib/helpers');
 
-    if (req._queryOptions && req._queryOptions.$search) {
-        const columns = req.query.SELECT?.columns || [];
-        const searchTerm = req._queryOptions.$search || "";  // Use the search term directly from query options
-        const searchableFields = columns.map((col) =>
-            col.ref ? col.ref[0] : col
-        );
-
-        // Add default fields to searchable fields if not already included
-        defaultFields.forEach((field) => {
-            if (!searchableFields.includes(field)) {
-                searchableFields.push(field);
-            }
-        });
-
-        // Build search conditions using "contains" for HANA text search
-        const searchConditions = searchableFields.map((field) => {
-            if (field === "departments") {
-                // For the 'departments' field, search in 'departments.name'
-                return { "departments.name": { contains: searchTerm, ignoreCase: true } };
-            }
-            return { [field]: { contains: searchTerm, ignoreCase: true } };
-        });
-
-        // HANA requires "or" to be specified as `$or` to combine conditions
-        query.$or = searchConditions;
-    }
-
-    return query;
-}
-
-
-async function sortOrder(req) {
-    let sort = {};
-
-    if (req._queryOptions && req._queryOptions.$orderby) {
-        const orderby = req._queryOptions.$orderby;
-        const fields = orderby.split(",");
-
-        fields.forEach((field) => {
-            const [key, direction] = field.trim().split(" ");
-            const sortDirection = direction === "desc" ? "desc" : "asc"; // HANA uses 'asc'/'desc' for sorting
-            sort[key] = sortDirection;
-        });
-    }
-
-    return sort;
-}
-
-async function sortOrderWithDepart(req) {
-    let sort = {};
-
-    // Check if the query options contain the $orderby clause
-    if (req._queryOptions && req._queryOptions.$orderby) {
-        const orderby = req._queryOptions.$orderby;
-        const fields = orderby.split(",");
-
-        // Loop through each field and determine the sorting direction
-        fields.forEach((field) => {
-            const [key, direction] = field.trim().split(" ");
-            const sortDirection = direction === "desc" ? "desc" : "asc"; // Use 'asc' or 'desc' for sorting
-
-            // If the sorting field is 'departmentName', target 'departments.name'
-            if (key === "departmentName") {
-                sort["departments.name"] = sortDirection;
-            } else {
-                sort[key] = sortDirection;  // Default behavior for other fields
-            }
-        });
-    }
-
-    return sort;
-}
-
-
-module.exports = async (srv) => {
+module.exports = cds.service.impl(async (srv) => {
     const db = await connectDB();
     // const tables = await db.model.definitions;
+
+    // Dashboard Page - UserCount remains unchanged
     srv.on("READ", "UserCount", async (req) => {
         try {
             const now = new Date();
@@ -115,9 +53,7 @@ module.exports = async (srv) => {
 
             // Initialize department counts
             const departments = await db.read(Departments);
-
             const departmentCounts = {};
-
             departments.forEach((dept) => {
                 departmentCounts[dept.name] = {
                     totalCount: 0,
@@ -144,7 +80,8 @@ module.exports = async (srv) => {
                     break;
             }
 
-            // Process additional filters from CDS query
+            // Process additional filters manually here (if still needed)
+            // Note: This is outside of the unified dynamic query builder
             if (req.query.SELECT.where) {
                 req.query.SELECT.where.forEach((condition, index) => {
                     if (index % 2 === 0 && condition.ref && req.query.SELECT.where[index + 1] === '=') {
@@ -175,10 +112,7 @@ module.exports = async (srv) => {
                     } else {
                         roleCounts[mappedRole].active++;
                     }
-
-                    // Regardless of inactivity, count users in each role
                     roleCounts[mappedRole].usercount++;
-                    // Add user details to the role's user list
                     roleCounts[mappedRole].users.push({
                         name: `${user.name} ${user.lastname}` || user.name || "",
                         username: user.username || "",
@@ -194,7 +128,7 @@ module.exports = async (srv) => {
                     const deptName = user.departments[0].name;
                     if (departmentCounts[deptName]) {
                         departmentCounts[deptName].totalCount++;
-                        departmentCounts[deptName].usercount++; // Every user adds to the department's user count
+                        departmentCounts[deptName].usercount++;
                         departmentCounts[deptName].users.push({
                             name: user.name || "",
                             username: user.username || "",
@@ -206,20 +140,19 @@ module.exports = async (srv) => {
                 }
             });
 
-            // Prepare combined result for roles
+            // Prepare combined result for roles and departments
             const roleResults = Object.keys(roleCounts).map((role) => ({
                 adminType: role,
                 activeCount: roleCounts[role].active,
                 inactiveCount: roleCounts[role].inactive,
-                usercount: roleCounts[role].usercount, // Correct usercount for each role
-                users: roleCounts[role].users, // Include the list of users
+                usercount: roleCounts[role].usercount,
+                users: roleCounts[role].users,
             }));
 
-            // Prepare combined result for departments
             const deptResults = Object.keys(departmentCounts).map((dept) => ({
                 deptType: dept,
                 totalCount: departmentCounts[dept].totalCount,
-                usercount: departmentCounts[dept].usercount, // Correct usercount for each department
+                usercount: departmentCounts[dept].usercount,
                 users: departmentCounts[dept].users,
             }));
 
@@ -230,27 +163,22 @@ module.exports = async (srv) => {
                 totalDepartments: deptResults.length,
             };
 
-            return { data: result }; // Returning the result
+            return { data: result };
         } catch (error) {
             console.error("Error fetching user counts:", error.message);
             return { error: "Error fetching user counts" };
         }
     });
 
+    // Dashboard Page - UserAttributes remains unchanged
     srv.on("READ", "UserAttributes", async (req) => {
         const email = req.user.id;
-        const userType = req.headers["usertype"];
-        console.log(email);
-        try {
-            if (userType === "ext") {
-                const base64Credentials = Buffer.from(
-                    `${IDP_USERNAME}:${IDP_PASSWORD}`,
-                    "utf-8"
-                ).toString("base64");
+        const userTypeHeader = req.headers["usertype"];
 
-                const headers = {
-                    Authorization: `Basic ${base64Credentials}`,
-                };
+        try {
+            if (userTypeHeader === "ext") {
+                const base64Credentials = Buffer.from(`${IDP_USERNAME}:${IDP_PASSWORD}`, "utf-8").toString("base64");
+                const headers = { Authorization: `Basic ${baseP64Credentials}` };
 
                 let startIndex = 1;
                 const count = 100; // Number of items per page
@@ -260,60 +188,36 @@ module.exports = async (srv) => {
                 while (!userFound) {
                     const response = await axios.get(`${IDP_ENDPOINT}/scim/Users`, {
                         headers,
-                        params: {
-                            startIndex,
-                            count,
-                        },
+                        params: { startIndex, count }
                     });
-
                     const users = response.data.Resources || [];
-                    matchingUser = users.find((user) => {
-                        return user.emails.some((email) => email.value === req.user.id);
-                    });
-
-                    if (matchingUser) {
-                        userFound = true;
-                        break;
-                    }
-
+                    matchingUser = users.find((user) => user.emails.some((emailObj) => emailObj.value === req.user.id));
+                    if (matchingUser) break;
                     const totalResults = response.data.totalResults || 0;
-                    if (startIndex + count > totalResults) {
-                        break; // No more pages to fetch
-                    }
-
-                    startIndex += count; // Move to the next page
+                    if (startIndex + count > totalResults) break;
+                    startIndex += count;
                 }
 
                 if (!matchingUser) {
                     return req.reject(404, "User not found");
                 }
 
-                const customAttributes =
-                    matchingUser["urn:sap:cloud:scim:schemas:extension:custom:2.0:User"]
-                        ?.attributes || [];
-                const departmentAttribute = customAttributes.find(
-                    (attr) => attr.name === "customAttribute2"
-                );
+                const customAttributes = matchingUser["urn:sap:cloud:scim:schemas:extension:custom:2.0:User"]?.attributes || [];
+                const departmentAttribute = customAttributes.find((attr) => attr.name === "customAttribute2");
 
                 const userInDb = await db.read(Users).where({ email: email }).limit(1);
                 if (!userInDb || userInDb.length === 0) {
                     return req.reject(404, "User not found in database");
                 }
                 const user = userInDb[0];
-
                 const departmentName = user.departments
                     ? user.departments[0].name
-                    : departmentAttribute
-                        ? departmentAttribute.value
-                        : null;
+                    : departmentAttribute ? departmentAttribute.value : null;
 
                 const departmentId = await db.read(Departments).where({ name: departmentName }).limit(1);
                 const departmentIdResult = departmentId.length > 0 ? departmentId[0]._id : null;
 
-                await db
-                    .update("Users")
-                    .set({ lastLoggedInTime: new Date() })
-                    .where({ _id: user._id });
+                await db.update("Users").set({ lastLoggedInTime: new Date() }).where({ _id: user._id });
 
                 const role = user.adminType;
                 const phone = user.phone;
@@ -356,23 +260,15 @@ module.exports = async (srv) => {
                     return req.reject(404, "User not found in database");
                 }
                 const user = userInDb[0];
-
                 const role = user.adminType;
                 const phone = user.phone;
-                const departmentName = user.departments
-                    ? user.departments[0].name
-                    : departmentAttribute
-                        ? departmentAttribute.value
-                        : null;
-
+                const departmentName = user.departments ? user.departments[0].name : null;
                 const departmentId = await db.read(Departments).where({ name: departmentName }).limit(1);
                 const departmentIdResult = departmentId.length > 0 ? departmentId[0]._id : null;
-
                 const imageurl = user.imageurl;
                 const adminType = user.adminType;
                 const name = user.name;
                 const signurl = user.signurl ?? "";
-
                 const roleDoc = await db.read(RoleAssignment).where({ adminType: adminType }).limit(1);
                 if (!roleDoc || roleDoc.length === 0) {
                     return req.reject(404, "Roles not found for admin type");
@@ -398,7 +294,6 @@ module.exports = async (srv) => {
 
     srv.on("READ", "AllUserType", async (req) => {
         try {
-            // const userType = await cds.run(SELECT.from('COMMON_USERTYPE'));
             const allUserTypes = await db.read(userType);
             userType["$count"] = userType.length;
             return allUserTypes;
@@ -410,165 +305,269 @@ module.exports = async (srv) => {
 
     srv.on("READ", "DepartmentDisplay", async () => {
         try {
-            const deptType = await db.read(Departments);
+            const deptType = await db.read(Departments).columns("ID", "name", "postalCode");
             const allUserTypes = await db.read(userType);
-            const result = {
-                department: deptType,
-                userType: allUserTypes,
-            };
-            return result;
+            return { department: deptType, userType: allUserTypes };
         } catch (err) {
             console.error(err, "Failed to fetch data from HANA");
             throw new Error("Failed to fetch data from HANA");
         }
     });
 
+    srv.on("CREATE", "Vendors", async (req) => {
+        let { res } = req.http;
+        try {
+            const { name, img, imagefilename, departmentName, createdByEmailID, shortname, type } = req.data;
+
+            if (!name || !departmentName || !createdByEmailID || !shortname || !type) {
+                return req.reject(400, "Missing required fields. Please ensure name, departmentName, shortname, type, and createdByEmailID are provided.");
+            }
+            if (!img || !imagefilename) {
+                return req.reject(400, "Vendor image and filename are required.");
+            }
+
+            const existingVendor = await db.read(Vendors).where({ name, department_name: departmentName });
+
+            if (existingVendor.length > 0) {
+                return req.reject(409, `Vendor with name "${name}" already exists in ${departmentName}`);
+            }
+
+            const department = await db.read(Departments).columns("ID", "name").where({ name: departmentName });
+
+            if (department.length === 0) {
+                return req.reject(404, `Department "${departmentName}" not found`);
+            }
+            const departmentId = department[0].ID;
+
+            const fileUrl = await uploadImageToAzure(name, img, imagefilename, connectionString, containerName);
+
+            const vendorData = {
+                name,
+                shortName: shortname,
+                type,
+                createdByEmailID,
+                department_name: departmentName,
+                department_ID: departmentId,
+                imageFileName: imagefilename,
+                img: fileUrl,
+                isDeleted: false,
+            };
+
+            await db.create(Vendors).entries(vendorData);
+            return vendorData;
+        } catch (err) {
+            console.error("Error inserting vendor into HANA DB", err);
+            return req.reject(500, `Unable to insert vendor data: ${err.message}`);
+        }
+    });
+
+    // Vendors READ endpoint using the unified dynamic query builder
     srv.on("READ", "Vendors", async (req) => {
         try {
-            let query = {};
+            const defaultFields = ["name", "type", "shortname"];
+            const { query, sort, pagination } = await buildDynamicQuery(req, defaultFields);
+            const sortOrder = sort.length ? sort : [{ ref: ["name"], sort: "asc" }];
+            const documents = await db.read(Vendors)
+                .where(query)
+                .orderBy(sortOrder)
+                .limit(pagination.top.val, pagination.skip);
 
-            if (req.query.SELECT.where) {
-                const whereClause = req.query.SELECT.where;
-                for (let i = 0; i < whereClause.length; i += 2) {
-                    if (whereClause[i].ref && whereClause[i + 1] === "=") {
-                        const field = whereClause[i].ref[0];
-                        const value = whereClause[i + 2].val;
-                        query[field] = value;
-                        i++;
-                    }
-                }
-            }
-
-            let defaultFields = ["name", "type", "shortname"];
-
-            let searchQuery = await buildSearchQuery(req, defaultFields);
-            query = { ...query, ...searchQuery };
-
-            var sort = await sortOrder(req);
-            if (Object.keys(sort).length === 0) {
-                sort["name"] = 1;  // Default sorting by 'name' if no sorting provided
-            }
-
-            // Handle pagination (skip and top)
-            let skip = req._queryOptions && req._queryOptions.$skip ? parseInt(req._queryOptions.$skip) : 0;
-            let top = req._queryOptions && req._queryOptions.$top ? parseInt(req._queryOptions.$top) : 100;
-
-            // Query the database using CAP's db.read method
-            let documents;
-            documents = await db.read(Vendors).where(query).orderBy(sort).limit(top, skip);
-
-            // Count total documents
-            const totalCount = await db.read(Vendors).where(query).length;
-
-            // Attach the count to the result
-            documents['$count'] = totalCount;
-
+            let totalCount = (await db.read(Vendors).where(query)).length;
+            documents["$count"] = totalCount;
             return documents;
         } catch (error) {
-            console.log(error, "Error occurred");
+            console.error("Error fetching vendors:", error);
             return req.reject(500, "Error fetching vendors");
         }
     });
 
-    srv.on("READ", "Administrators", async (req) => {
+    srv.on("PUT", "Vendors", async (req) => {
         try {
-            let query = { isDeleted: false, type: { in: [1, 7, 10] } };
-
-            // Build search query if $search is provided
-            if (req._queryOptions && req._queryOptions.$search) {
-                const columns = req.query.SELECT?.columns || [];
-                const searchTerm = req._queryOptions.$search || "";
-                const searchableFields = columns.map((col) => col.ref ? col.ref[0] : col);
-                const defaultFields = ["name", "lastname"];
-
-                // Add default fields to the searchable fields if not present
-                defaultFields.forEach((field) => {
-                    if (!searchableFields.includes(field)) {
-                        searchableFields.push(field);
-                    }
-                });
-
-                // Create search conditions for each field
-                const searchConditions = searchableFields.map((field) => {
-                    if (field === "departments") {
-                        return { "departments.name": { contains: searchTerm, ignoreCase: true } };
-                    }
-                    return { [field]: { contains: searchTerm, ignoreCase: true } };
-                });
-
-                // Add search conditions to the query
-                query.$or = searchConditions;
+            const name = req.params[0].name;
+            const { img, imagefilename, shortname, type, departmentName } = req.data;
+            const vendor = await db.read(Vendors).where({ name, department_name: departmentName });
+            if (vendor.length === 0) {
+                return req.reject(404, `Vendor with name "${name}" not found in ${departmentName}`);
             }
-
-            // Add additional where conditions from the SELECT clause
-            if (req.query.SELECT.where) {
-                const whereClause = req.query.SELECT.where;
-                for (let i = 0; i < whereClause.length; i++) {
-                    if (whereClause[i].ref) {
-                        const field = whereClause[i].ref[0];
-                        const operator = whereClause[i + 1];
-                        const value = whereClause[i + 2].val;
-                        if (operator === "=") {
-                            query[field] = value;
-                        }
-                        i += 2;
-                    }
+            const existingVendor = vendor[0];
+            let fileUrl = existingVendor.img;
+            if (img && imagefilename) {
+                if (existingVendor.imagefilename && existingVendor.imagefilename !== imagefilename) {
+                    await deleteImageFromAzure(`${name}_${existingVendor.imagefilename}`, connectionString, containerName);
                 }
+                fileUrl = await uploadImageToAzure(name, img, imagefilename, connectionString, containerName);
             }
 
-            // If departmentName is passed, map it to departments.name
-            if (query["departmentName"]) {
-                query["departments.name"] = query["departmentName"];
-                delete query["departmentName"];
-            }
+            const updatedVendorData = { shortname, type, imagefilename, img: fileUrl };
+            const result = await db.update(Vendors).set(updatedVendorData).where({ name, department_name: departmentName });
 
-            // Sorting based on user input
-            let sort = await sortOrderWithDepart(req);
-            if (Object.keys(sort).length === 0) {
-                sort["createdDateTime"] = "desc"; // Default sort by createdDateTime in descending order
-            }
-
-            // Query the Users table in HANA using CAP's db.read method
-            let users;
-            if (req._queryOptions && req._queryOptions.$skip && req._queryOptions.$top) {
-                let skip = parseInt(req._queryOptions.$skip);
-                let top = parseInt(req._queryOptions.$top);
-                users = await db.read(Users).where(query).orderBy(sort).limit(top, skip);
+            if (result === 1) {
+                return { message: `Vendor with name ${name} updated successfully` };
             } else {
-                users = await db.read(Users).where(query).orderBy(sort);
+                return req.reject(404, `Vendor with name ${name} not found`);
             }
-
-            // Process the users' departments
-            users.forEach((user) => {
-                if (user.departments && user.departments.length > 0) {
-                    const firstDepartmentname = user.departments[0].name;
-                    user.departments = firstDepartmentname; // Only store the name of the first department
-                } else {
-                    user.departments = null;
-                }
-            });
-
-            // Log the users for debugging
-            users.forEach((user) => {
-                console.log(`User: ${user.username}`);
-                console.log(`Department Name: ${user.departments}`);
-            });
-
-            // Map the results
-            const result = users.map((doc) => ({
-                ...doc,
-                username: doc.username,
-            }));
-
-            // Add the total count of matching users
-            result["$count"] = await db.read(Users).where(query).length;
-
-            return result;
-
         } catch (err) {
-            console.error("Error fetching administrators data:", err);
-            req.reject(500, "Failed to fetch data from HANA");
+            console.error("Error updating vendor in HANA DB", err);
+            return req.reject(500, "Unable to update vendor data");
         }
     });
 
-};
+    // Administrators READ endpoint using the unified dynamic query builder
+    srv.on("READ", "Administrators", async (req) => {
+        try {
+            const defaultFields = ["name", "lastname"];
+
+            let { query, sort, pagination } = await buildDynamicQuery(req, defaultFields);
+
+
+            // Map departmentName filter to departments.name if needed
+            if (query.departmentName) {
+                query["departments.name"] = query.departmentName;
+                delete query.departmentName;
+            }
+
+            const sortOrder = sort.length ? sort : [{ ref: ["createdDateTime"], sort: "desc" }];
+
+            let users = await db.read(Users)
+                .where(query)
+                .orderBy(sortOrder)
+                .limit(pagination.top.val, pagination.skip);
+
+            let totalCount = (await db.read(Users).where(query)).length;
+            users["$count"] = totalCount;
+            return { users };
+        } catch (err) {
+            console.error("Error fetching administrators data:", err);
+            return req.reject(500, "Failed to fetch data from HANA");
+        }
+    });
+
+    srv.on("CREATE", "Administrators", async (req) => {
+        try {
+            const { username, name, lastname, phone, adminType, departments, imageurl, imagefilename } = req.data;
+            const now = new Date();
+            const formattedDate = now.toISOString();
+
+            const fileUrl = await uploadImageToAzure(username, imageurl, imagefilename);
+            const typeMapping = {
+                "Power User": 1,
+                "Quality User": 7,
+                "Corporate Quality User": 7,
+                "Business User": 10,
+            };
+            const type = typeMapping[adminType] ?? 1;
+
+            const administratorData = {
+                username,
+                name,
+                lastname,
+                UserName: username,
+                createdDateTime: formattedDate,
+                phone,
+                adminType,
+                departments: JSON.stringify([{ name: departments }]),
+                status: "active",
+                imageurl: fileUrl,
+                imagefilename,
+                type,
+                isDeleted: false,
+            };
+
+            await db.insert("your.namespace.Administrators").entries(administratorData);
+            return administratorData;
+        } catch (err) {
+            console.error("Error inserting administrator into HANA DB", err);
+            return req.reject(500, "Unable to insert data");
+        }
+    });
+
+    srv.on("PUT", "Administrators", async (req) => {
+        try {
+            const username = req.params[0].username;
+            const { name, lastname, phone, adminType, departments, imageurl, imagefilename } = req.data;
+
+            const result = await db.read("your.namespace.Administrators").where({ username });
+            if (result.length === 0) {
+                return req.reject(404, `Administrator with username ${username} not found`);
+            }
+            const existingUser = result[0];
+
+            let fileUrl = existingUser.imageurl;
+            if (imageurl && imagefilename) {
+                if (existingUser.imagefilename && existingUser.imagefilename !== imagefilename) {
+                    await deleteImageFromAzure(`${username}_${existingUser.imagefilename}`);
+                }
+                fileUrl = await uploadImageToAzure(username, imageurl, imagefilename);
+            }
+
+            const updateData = {
+                name,
+                lastname,
+                phone,
+                adminType,
+                departments: JSON.stringify([{ name: departments }]),
+                imageurl: fileUrl,
+                imagefilename,
+            };
+
+            const updated = await db.update("your.namespace.Administrators")
+                .set(updateData)
+                .where({ username });
+            if (updated === 1) {
+                return { message: `Administrator with username ${username} updated successfully` };
+            } else {
+                return req.reject(404, `Administrator with username ${username} not found`);
+            }
+        } catch (err) {
+            console.error("Error updating administrator in HANA DB", err);
+            return req.reject(500, "Failed to update administrator");
+        }
+    });
+
+    srv.on("DELETE", "Administrators", async (req) => {
+        try {
+            const username = req.params[0].username;
+            console.log(`Attempting to delete administrator with username: ${username}`);
+
+            const userInHana = await db.read(Users).where({ username });
+            if (userInHana.length > 0) {
+                await db.update(Users).set({ isDeleted: true }).where({ username });
+                console.log(`Administrator with username ${username} marked as deleted in HANA DB.`);
+            }
+
+            const base64Credentials = Buffer.from(`${IDP_USERNAME}:${IDP_PASSWORD}`, "utf-8").toString("base64");
+            const headers = {
+                Authorization: `Basic ${base64Credentials}`,
+                "Content-Type": "application/scim+json",
+            };
+
+            const idpResponse = await axios.get(
+                `${IDP_ENDPOINT}/scim/Users?filter=emails.value eq "${username}"`,
+                { headers }
+            );
+            if (idpResponse.data.Resources && idpResponse.data.Resources.length > 0) {
+                const userId = idpResponse.data.Resources[0].id;
+                await axios.delete(`${IDP_ENDPOINT}/scim/Users/${userId}`, { headers });
+                console.log(`User with username ${username} deleted successfully from IDP.`);
+            }
+        } catch (err) {
+            console.error("Error deleting administrator", err);
+            return req.reject(500, `Failed to delete administrator: ${err.message}`);
+        }
+    });
+
+    // Uncomment this block for file upload testing if needed.
+    // srv.on("CREATE", "Test", async (req) => {
+    //     if (!req._.req?.files || !req._.req.files.UploadedFile) {
+    //         throw new Error("No file uploaded.");
+    //     }
+    //     const file = req._.req.files.UploadedFile;
+    //     console.log("📁 File received:", file.name);
+    //     return {
+    //         fileName: file.name,
+    //         buffer: file.data,
+    //         size: file.size,
+    //         mimeType: file.mimetype
+    //     };
+    // });
+});

@@ -51,6 +51,8 @@ service CommonServices {
             img              : String;
             uniqueFields     : String;
             message          : String;
+            totalCount       : String;
+            data             : Integer;
     }
 
     @cds.persistence.skip
@@ -70,4 +72,8 @@ service CommonServices {
             message         : String;
             signurl         : String
     }
+
+// entity Test {
+//     key data : many String;
+// }
 }

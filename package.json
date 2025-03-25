@@ -6,12 +6,15 @@
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
+    "@azure/storage-blob": "^12.27.0",
     "@cap-js-community/odata-v2-adapter": "^1.14.2",
     "@cap-js/hana": "^1",
     "@sap/cds": "^8",
     "@sap/hana-client": "^2.24.21",
     "axios": "^1.8.4",
+    "dotenv": "^16.4.7",
     "express": "^4",
+    "express-fileupload": "^1.5.1",
     "hdb": "^0.19.12"
   },
   "devDependencies": {
