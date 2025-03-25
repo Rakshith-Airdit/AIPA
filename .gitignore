@@ -37,5 +37,7 @@ mta_archives/
 db/.env
 # auto generated wildcard
 .env1
+.env2
 
 tree-maker
+.env
