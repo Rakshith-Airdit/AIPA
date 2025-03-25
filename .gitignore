@@ -38,5 +38,5 @@ db/.env
 # auto generated wildcard
 .env1
 .env2
-/.env
+/ .env
 tree-maker
