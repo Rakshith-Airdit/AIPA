@@ -44,6 +44,7 @@ cds.on("bootstrap", async (app) => {
     //     await closeDB(); // Close the DB connection
     //     process.exit(0);  // Exit the process
     // });
+    //check
 });
 
 module.exports = cds.server;
