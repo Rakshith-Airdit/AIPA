@@ -24,7 +24,7 @@ modules:
         properties:
           srv-url: ${default-url}
     requires:
-      - name: AIPA-HANA-DB-db
+      - name: hdb-other-aipa
 
   - name: AIPA-HANA-DB-db-deployer
     type: hdb
@@ -32,10 +32,10 @@ modules:
     parameters:
       buildpack: nodejs_buildpack
     requires:
-      - name: AIPA-HANA-DB-db
+      - name: hdb-other-aipa
 
 resources:
-  - name: AIPA-HANA-DB-db
+  - name: hdb-other-aipa
     type: com.sap.xs.hdi-container
     parameters:
       service: hana

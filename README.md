@@ -1,25 +1,44 @@
-# Getting Started
 
-Welcome to your new project.
+```
+AIPA-HANA-DB
+├─ .cfignore
+├─ app
+├─ controller
+│  ├─ activityController.js
+│  ├─ administratorController.js
+│  ├─ btpUserController.js
+│  ├─ commonController.js
+│  ├─ departmentController.js
+│  ├─ deviceController.js
+│  ├─ fieldUserController.js
+│  ├─ projectController.js
+│  ├─ redFlagRuleController.js
+│  ├─ userManagementController.js
+│  └─ vendorController.js
+├─ db
+│  ├─ activityEntities.cds
+│  ├─ associations.cds
+│  ├─ common.cds
+│  ├─ mdpeEntities.cds
+│  ├─ mdpeStoresEntities.cds
+│  ├─ src
+│  │  └─ .hdiconfig
+│  ├─ staticTypes.cds
+│  ├─ steelEntities.cds
+│  ├─ steelStoresEntities.cds
+│  └─ undeploy.json
+├─ eslint.config.mjs
+├─ lib
+│  ├─ db-connect.js
+│  ├─ helpers.js
+│  └─ modelLoader.js
+├─ mta.yaml
+├─ package-lock.json
+├─ package.json
+├─ README.md
+└─ srv
+   ├─ common-service.cds
+   ├─ common-service.js
+   └─ server.js
 
-It contains these folders and files, following our recommended project layout:
-
-File or Folder | Purpose
----------|----------
-`app/` | content for UI frontends goes here
-`db/` | your domain models and data go here
-`srv/` | your service models and code go here
-`package.json` | project metadata and configuration
-`readme.md` | this getting started guide
-
-
-## Next Steps
-
-- Open a new terminal and run `cds watch`
-- (in VS Code simply choose _**Terminal** > Run Task > cds watch_)
-- Start adding content, for example, a [db/schema.cds](db/schema.cds).
-
-
-## Learn More
-
-Learn more at https://cap.cloud.sap/docs/get-started/.
+```

@@ -1,14 +1,18 @@
 const cds = require("@sap/cds");
 const cov2ap = require("@cap-js-community/odata-v2-adapter");
+// const { connectDB, closeDB } = require("../lib/db-connect");
 // const fileUpload = require("express-fileupload");
 
 // Register everything inside bootstrap
-cds.on("bootstrap", (app) => {
+cds.on("bootstrap", async (app) => {
     console.log("✅ BOOTSTRAP is running");
 
     // OData V2 Adapter
     app.use(cov2ap());
 
+
+    // const db = await connectDB();
+    // global.db = await connectDB();
     // File upload middleware
     // app.use(fileUpload({ createParentPath: true }));
 
@@ -33,6 +37,12 @@ cds.on("bootstrap", (app) => {
     //         console.error("❌ File upload error:", err);
     //         res.status(500).send("Internal Server Error");
     //     }
+    // });
+
+    // process.on('SIGINT', async () => {
+    //     console.log("🔌 Shutting down gracefully...");
+    //     await closeDB(); // Close the DB connection
+    //     process.exit(0);  // Exit the process
     // });
 });
 

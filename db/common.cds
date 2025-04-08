@@ -318,7 +318,7 @@ entity Projects {
         pressure              : String(50);
         description           : String(255);
         users                 : associations.UserAssociation;
-        equipmentType         : Map;
+        equipmentType         : String;
         efMachineSerialNumber : String;
         department            : associations.DepartmentAssociation;
         departmentName        : String;
